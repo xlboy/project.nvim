@@ -6,6 +6,10 @@ M.defaults = {
   -- the option to manually do so using `:ProjectRoot` command.
   manual_mode = false,
 
+  -- Because autochdir can conflict with this plugin to cause buggy behaviour,
+  -- this plugin will disable autochdir by default.
+  unset_autochdir = true,
+
   -- Methods of detecting the root directory. **"lsp"** uses the native neovim
   -- lsp, while **"pattern"** uses vim-rooter like glob pattern matching. Here
   -- order matters: if one is not detected, the other is used as fallback. You
@@ -64,7 +68,9 @@ M.setup = function(options)
     return glob.globtopattern(pattern)
   end, M.options.exclude_dirs)
 
-  vim.opt.autochdir = false -- implicitly unset autochdir
+  if M.options.unset_autochdir then
+    vim.opt.autochdir = false -- implicitly unset autochdir
+  end
 
   require("project_nvim.utils.path").init()
   require("project_nvim.project").init()
