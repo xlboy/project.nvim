@@ -281,6 +281,7 @@ function M.init()
   vim.cmd("augroup END")
 
   history.read_projects_from_history()
+  history.init_project_name_map()
 end
 
 return M

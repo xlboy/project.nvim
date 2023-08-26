@@ -31,18 +31,13 @@ local function create_finder()
   end
   local displayer = entry_display.create({
     separator = " ",
-    items = {
-      {
-        width = 30,
-      },
-      {
-        remaining = true,
-      },
-    },
+    items = { { width = 30 }, { remaining = true } },
   })
 
   local function make_display(entry)
-    return displayer({ entry.name, { entry.value, "Comment" } })
+    local project_name_map = history.project_name_map
+    local name = project_name_map[entry.value] or entry.name
+    return displayer({ name, { entry.value, "Comment" } })
   end
 
   return finders.new_table({
@@ -110,17 +105,6 @@ local function search_in_project_files(prompt_bufnr)
   end
 end
 
-local function recent_project_files(prompt_bufnr)
-  local _, cd_successful = change_working_directory(prompt_bufnr, true)
-  local opt = {
-    cwd_only = true,
-    hidden = config.options.show_hidden,
-  }
-  if cd_successful then
-    builtin.oldfiles(opt)
-  end
-end
-
 local function delete_project(prompt_bufnr)
   local selectedEntry = state.get_selected_entry(prompt_bufnr)
   if selectedEntry == nil then
@@ -139,44 +123,64 @@ local function delete_project(prompt_bufnr)
   end
 end
 
+local function rename_project(prompt_bufnr)
+  local selectedEntry = state.get_selected_entry(prompt_bufnr)
+  if selectedEntry == nil then
+    actions.close(prompt_bufnr)
+    return
+  end
+
+  local new_name = vim.fn.input("Please enter a new project name: ")
+  if new_name ~= "" then
+    local project_path = selectedEntry.value
+    history.rename_project(new_name, project_path)
+    state.get_current_picker(prompt_bufnr):refresh(create_finder(), {
+      reset_prompt = true,
+    })
+  end
+end
+
 ---Main entrypoint for Telescope.
 ---@param opts table
 local function projects(opts)
   opts = opts or {}
 
-  pickers.new(opts, {
-    prompt_title = "Recent Projects",
-    finder = create_finder(),
-    previewer = false,
-    sorter = telescope_config.generic_sorter(opts),
-    attach_mappings = function(prompt_bufnr, map)
-      map("n", "f", find_project_files)
-      map("n", "b", browse_project_files)
-      map("n", "d", delete_project)
-      map("n", "s", search_in_project_files)
-      map("n", "r", recent_project_files)
-      map("n", "w", change_working_directory)
+  pickers
+      .new(opts, {
+        prompt_title = "Recent Projects",
+        finder = create_finder(),
+        previewer = false,
+        sorter = telescope_config.generic_sorter(opts),
+        attach_mappings = function(prompt_bufnr, map)
+          map("n", "f", find_project_files)
+          map("n", "b", browse_project_files)
+          map("n", "d", delete_project)
+          map("n", "s", search_in_project_files)
+          -- map("n", "r", recent_project_files)
+          map("n", "r", rename_project)
+          map("n", "w", change_working_directory)
 
-      map("i", "<c-f>", find_project_files)
-      map("i", "<c-b>", browse_project_files)
-      map("i", "<c-d>", delete_project)
-      map("i", "<c-s>", search_in_project_files)
-      map("i", "<c-r>", recent_project_files)
-      map("i", "<cr>", change_working_directory)
-      map("i", "<c-w>", change_working_directory)
+          map("i", "<c-f>", find_project_files)
+          map("i", "<c-b>", browse_project_files)
+          map("i", "<c-d>", delete_project)
+          map("i", "<c-s>", search_in_project_files)
+          -- map("i", "<c-r>", recent_project_files)
+          map("i", "<cr>", change_working_directory)
+          map("i", "<c-w>", change_working_directory)
 
-      local on_project_selected = function()
-        config.options.before_project_selection_callback()
+          local on_project_selected = function()
+            config.options.before_project_selection_callback()
 
-        find_project_files(prompt_bufnr)
+            find_project_files(prompt_bufnr)
 
-        config.options.after_project_selection_callback()
-      end
+            config.options.after_project_selection_callback()
+          end
 
-      actions.select_default:replace(on_project_selected)
-      return true
-    end,
-  }):find()
+          actions.select_default:replace(on_project_selected)
+          return true
+        end,
+      })
+      :find()
 end
 
 return telescope.register_extension({

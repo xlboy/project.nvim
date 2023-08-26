@@ -1,10 +1,11 @@
 local path = require("project_nvim.utils.path")
 local uv = vim.loop
 local M = {}
-local is_windows = vim.fn.has('win32') or vim.fn.has('wsl')
+local is_windows = vim.fn.has("win32") or vim.fn.has("wsl")
 
 M.recent_projects = nil -- projects from previous neovim sessions
 M.session_projects = {} -- projects from current neovim session
+M.project_name_map = {} -- 项目名称 与 项目路径 的映射
 M.has_watch_setup = false
 
 local function open_history(mode, callback)
@@ -18,6 +19,17 @@ local function open_history(mode, callback)
   end
 end
 
+local function open_project_name_map(mode, callback)
+  if callback ~= nil then -- async
+    path.create_scaffolding(function(_, _)
+      uv.fs_open(path.project_name_map_file, mode, 438, callback)
+    end)
+  else -- sync
+    path.create_scaffolding()
+    return uv.fs_open(path.project_name_map_file, mode, 438)
+  end
+end
+
 local function dir_exists(dir)
   local stat = uv.fs_stat(dir)
   if stat ~= nil and stat.type == "directory" then
@@ -27,13 +39,13 @@ local function dir_exists(dir)
 end
 
 local function normalise_path(path_to_normalise)
-    local normalised_path = path_to_normalise:gsub("\\", "/"):gsub("//", "/")
+  local normalised_path = path_to_normalise:gsub("\\", "/"):gsub("//", "/")
 
-    if is_windows then
-       normalised_path = normalised_path:sub(1,1):lower()..normalised_path:sub(2)
-    end
+  if is_windows then
+    normalised_path = normalised_path:sub(1, 1):lower() .. normalised_path:sub(2)
+  end
 
-    return normalised_path
+  return normalised_path
 end
 
 local function delete_duplicates(tbl)
@@ -67,6 +79,36 @@ function M.delete_project(project)
   end
 end
 
+local function write_project_name_map_to_file(mode)
+  local name_map_file = open_project_name_map(mode)
+  if name_map_file ~= nil then
+    local map_out = ""
+    for p_path, p_name in pairs(M.project_name_map) do
+      map_out = map_out .. p_name .. " <<<<<>>>>> " .. p_path .. "\n"
+    end
+    uv.fs_write(name_map_file, map_out, -1)
+    uv.fs_close(name_map_file)
+  end
+end
+
+function M.rename_project(p_name, p_path)
+  M.project_name_map[p_path] = p_name
+  write_project_name_map_to_file("w")
+end
+
+local function deserialize_project_name_map(data_str)
+  local project_name_map = {}
+  for s in data_str:gmatch("[^\r\n]+") do
+    local project_name, project_path = s:match("(.-)%s*<<<<<>>>>>%s*(.*)")
+
+    if not path.is_excluded(project_path) and dir_exists(project_path) then
+      project_name_map[project_path] = project_name
+    end
+  end
+
+  M.project_name_map = project_name_map
+end
+
 local function deserialize_history(history_data)
   -- split data to table
   local projects = {}
@@ -95,10 +137,27 @@ local function setup_watch()
       end
       if events["change"] then
         M.recent_projects = nil
+        M.project_name_map = nil
         M.read_projects_from_history()
+        M.init_project_name_map()
       end
     end)
   end
+end
+
+function M.init_project_name_map()
+  open_project_name_map("r", function(_, fd)
+    if fd ~= nil then
+      uv.fs_fstat(fd, function(_, stat)
+        if stat ~= nil then
+          uv.fs_read(fd, stat.size, -1, function(_, data)
+            uv.fs_close(fd, function(_, _) end)
+            deserialize_project_name_map(data)
+          end)
+        end
+      end)
+    end
+  end)
 end
 
 function M.read_projects_from_history()
@@ -173,6 +232,8 @@ function M.write_projects_to_history()
     uv.fs_write(file, out, -1)
     uv.fs_close(file)
   end
+
+  write_project_name_map_to_file(mode)
 end
 
 return M

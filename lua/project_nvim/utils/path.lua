@@ -5,11 +5,13 @@ local M = {}
 M.datapath = vim.fn.stdpath("data") -- directory
 M.projectpath = M.datapath .. "/project_nvim" -- directory
 M.historyfile = M.projectpath .. "/project_history" -- file
+M.project_name_map_file = M.projectpath .. "/project_name_map"
 
 function M.init()
   M.datapath = require("project_nvim.config").options.datapath
   M.projectpath = M.datapath .. "/project_nvim" -- directory
   M.historyfile = M.projectpath .. "/project_history" -- file
+  M.project_name_map_file = M.projectpath .. "/project_name_map"
 end
 
 function M.create_scaffolding(callback)
